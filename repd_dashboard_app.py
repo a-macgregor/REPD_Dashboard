@@ -14,51 +14,59 @@ st.markdown("Filter, explore and export data from the UK Renewable Energy Planni
 
 # --- DATA FETCH & CLEAN ---
 @st.cache_data
-
 def load_data():
-    # Show what column names are present in live environment
-    st.write("📋 Loaded columns:", list(df.columns))
-
     if not os.path.exists(LOCAL_CSV_PATH):
         st.error(f"CSV file '{LOCAL_CSV_PATH}' not found.")
-        st.stop()
+        return pd.DataFrame()
 
     df = pd.read_csv(LOCAL_CSV_PATH, encoding='ISO-8859-1')
 
-    # Standardize key text fields
-    df['Technology Type'] = df['Technology Type'].astype(str).str.strip().str.title()
-    df['Region'] = df['Region'].astype(str).str.strip().str.title()
-    df['Development Status'] = df['Development Status'].astype(str).str.strip().str.title()
+    # Show what column names are present in live environment
+    st.write("📋 Loaded columns:", list(df.columns))
 
     # Clean up weird formatting in column names
     df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", '')
 
+    # Standardize key text fields
+    df['Technology Type'] = df.get('Technology Type', '').astype(str).str.strip().str.title()
+    df['Region'] = df.get('Region', '').astype(str).str.strip().str.title()
+    df['Development Status'] = df.get('Development Status', '').astype(str).str.strip().str.title()
+
     # Clean Installed Capacity column
-    df['Installed Capacity (MWelec)'] = (
-    df['Installed Capacity (MWelec)']
-    .astype(str)                         # Convert everything to string
-    .str.replace(',', '')                # Remove commas
-    .str.replace('MW', '', case=False)   # Remove units if any
-    .str.strip()                         # Strip whitespace
-    .replace('', '0')                    # Replace blanks with 0
-    .astype(float)                       # Finally convert to float
-)
+    if 'Installed Capacity (MWelec)' in df.columns:
+        df['Installed Capacity (MWelec)'] = (
+            df['Installed Capacity (MWelec)']
+            .astype(str)
+            .str.replace(',', '')
+            .str.replace('MW', '', case=False)
+            .str.strip()
+            .replace('', '0')
+            .astype(float)
+        )
+        df['Installed Capacity (MWelec)'] = pd.to_numeric(df['Installed Capacity (MWelec)'], errors='coerce')
+    else:
+        df['Installed Capacity (MWelec)'] = pd.NA
 
-    df['Installed Capacity (MWelec)'] = pd.to_numeric(df['Installed Capacity (MWelec)'], errors='coerce')
-    df['Application Year'] = pd.to_numeric(df['Application Year'], errors='coerce')
+    # Handle planning dates
+    if 'Planning Application Submitted' in df.columns:
+        df['Planning Application Submitted'] = pd.to_datetime(df['Planning Application Submitted'], errors='coerce')
+    if 'Planning Permission Granted' in df.columns:
+        df['Planning Permission Granted'] = pd.to_datetime(df['Planning Permission Granted'], errors='coerce')
+    if 'Planning Application Submitted' in df.columns and 'Planning Permission Granted' in df.columns:
+        df['Time to Consent (days)'] = (df['Planning Permission Granted'] - df['Planning Application Submitted']).dt.days
+    else:
+        df['Time to Consent (days)'] = pd.NA
 
-    # Debug output
+    # Create or clean Application Year
+    if 'Application Year' in df.columns:
+        df['Application Year'] = pd.to_numeric(df['Application Year'], errors='coerce')
+    elif 'Planning Application Submitted' in df.columns:
+        df['Application Year'] = df['Planning Application Submitted'].dt.year
+    else:
+        df['Application Year'] = pd.NA
+
+    # Final debug output
     st.write("📋 Cleaned Column Names:", list(df.columns))
-
-    # Proceed with processing
-    df['Planning Application Submitted'] = pd.to_datetime(df['Planning Application Submitted'], errors='coerce')
-    df['Planning Permission Granted'] = pd.to_datetime(df['Planning Permission Granted'], errors='coerce')
-    df['Time to Consent (days)'] = (df['Planning Permission Granted'] - df['Planning Application Submitted']).dt.days
-    if 'Application Year' not in df.columns:
-        if 'Planning Application Submitted' in df.columns:
-            df['Application Year'] = pd.to_datetime(df['Planning Application Submitted'], errors='coerce').dt.year
-        else:
-            df['Application Year'] = pd.NA
 
     return df
 
@@ -93,8 +101,6 @@ if 'Application Year' in df.columns and df['Application Year'].dropna().size > 0
 else:
     st.warning("⚠️ Application Year data not available.")
     years = (2020, 2025) # fallback if all values are missing
-
-st.write("🧪 Application Year values:", df['Application Year'].dropna().unique())
 
 # --- DATA FILTERING ---
 filtered_df = df[
