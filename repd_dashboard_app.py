@@ -41,6 +41,9 @@ def load_data():
     .astype(float)                       # Finally convert to float
 )
 
+    df['Installed Capacity (MWelec)'] = pd.to_numeric(df['Installed Capacity (MWelec)'], errors='coerce')
+    df['Application Year'] = pd.to_numeric(df['Application Year'], errors='coerce')
+
     # Debug output
     st.write("📋 Cleaned Column Names:", list(df.columns))
 
@@ -57,8 +60,7 @@ df = load_data()
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("🔍 Filters")
 tech_options = df['Technology Type'].dropna().unique().tolist()
-
-default_tech = 'Solar Photovoltaics' if 'Solar Photovoltaics' in tech_options else None
+default_tech = ['Solar Photovoltaics'] if 'Solar Photovoltaics' in tech_options else []
 
 technologies = st.sidebar.multiselect(
     "Technology Type",
@@ -67,8 +69,22 @@ technologies = st.sidebar.multiselect(
 )
 
 regions = st.sidebar.multiselect("Region", df['Region'].dropna().unique(), default=df['Region'].dropna().unique())
-size_range = st.sidebar.slider("Project Size (MW)", 0, int(df['Installed Capacity (MWelec)'].max()), (0, 50))
-years = st.sidebar.slider("Application Year", int(df['Application Year'].min()), int(df['Application Year'].max()), (2015, 2025))
+
+# --- SAFELY HANDLE PROJECT SIZE SLIDER ---
+if df['Installed Capacity (MWelec)'].dropna().size > 0:
+    min_size = int(df['Installed Capacity (MWelec)'].min())
+    max_size = int(df['Installed Capacity (MWelec)'].max())
+    size_range = st.sidebar.slider("Project Size (MW)", min_size, max_size, (min_size, max_size))
+else:
+    size_range = (0, 0)  # fallback if all values are missing
+
+# --- SAFELY HANDLE APPLICATION YEAR SLIDER ---
+if 'Application Year' in df.columns and df['Application Year'].dropna().size > 0:
+    min_year = int(df['Application Year'].min())
+    max_year = int(df['Application Year'].max())
+    years = st.sidebar.slider("Application Year", min_year, max_year, (min_year, max_year))
+else:
+    years = (2020, 2025)  # fallback if column is missing or empty
 
 # --- DATA FILTERING ---
 filtered_df = df[
