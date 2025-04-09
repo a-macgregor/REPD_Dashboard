@@ -22,6 +22,11 @@ def load_data():
 
     df = pd.read_csv(LOCAL_CSV_PATH, encoding='ISO-8859-1')
 
+    # Standardize key text fields
+    df['Technology Type'] = df['Technology Type'].astype(str).str.strip().str.title()
+    df['Region'] = df['Region'].astype(str).str.strip().str.title()
+    df['Development Status'] = df['Development Status'].astype(str).str.strip().str.title()
+
     # Clean up weird formatting in column names
     df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", '')
 
@@ -51,7 +56,16 @@ df = load_data()
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("🔍 Filters")
-technologies = st.sidebar.multiselect("Technology Type", df['Technology Type'].dropna().unique(), default=['Solar Photovoltaics'])
+tech_options = df['Technology Type'].dropna().unique().tolist()
+
+default_tech = 'Solar Photovoltaics' if 'Solar Photovoltaics' in tech_options else None
+
+technologies = st.sidebar.multiselect(
+    "Technology Type",
+    options=tech_options,
+    default=default_tech
+)
+
 regions = st.sidebar.multiselect("Region", df['Region'].dropna().unique(), default=df['Region'].dropna().unique())
 size_range = st.sidebar.slider("Project Size (MW)", 0, int(df['Installed Capacity (MWelec)'].max()), (0, 50))
 years = st.sidebar.slider("Application Year", int(df['Application Year'].min()), int(df['Application Year'].max()), (2015, 2025))
