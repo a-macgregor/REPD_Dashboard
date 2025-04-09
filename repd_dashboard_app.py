@@ -1,0 +1,119 @@
+# repd_dashboard_app.py
+
+import streamlit as st
+import pandas as pd
+import os
+
+# --- CONFIG ---
+LOCAL_CSV_PATH = "repd_jan2025.csv"
+
+# --- PAGE SETUP ---
+st.set_page_config(page_title="UK REPD Dashboard", layout="wide")
+st.title("📈 Renewable Energy Planning Dashboard")
+st.markdown("Filter, explore and export data from the UK Renewable Energy Planning Database (REPD).")
+
+# --- DATA FETCH & CLEAN ---
+@st.cache_data
+
+def load_data():
+    if not os.path.exists(LOCAL_CSV_PATH):
+        st.error(f"CSV file '{LOCAL_CSV_PATH}' not found.")
+        st.stop()
+
+    df = pd.read_csv(LOCAL_CSV_PATH, encoding='ISO-8859-1')
+
+    # Clean up weird formatting in column names
+    df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", '')
+
+    # Clean Installed Capacity column
+    df['Installed Capacity (MWelec)'] = (
+    df['Installed Capacity (MWelec)']
+    .astype(str)                         # Convert everything to string
+    .str.replace(',', '')                # Remove commas
+    .str.replace('MW', '', case=False)   # Remove units if any
+    .str.strip()                         # Strip whitespace
+    .replace('', '0')                    # Replace blanks with 0
+    .astype(float)                       # Finally convert to float
+)
+
+    # Debug output
+    st.write("📋 Cleaned Column Names:", list(df.columns))
+
+    # Proceed with processing
+    df['Planning Application Submitted'] = pd.to_datetime(df['Planning Application Submitted'], errors='coerce')
+    df['Planning Permission Granted'] = pd.to_datetime(df['Planning Permission Granted'], errors='coerce')
+    df['Time to Consent (days)'] = (df['Planning Permission Granted'] - df['Planning Application Submitted']).dt.days
+    df['Application Year'] = df['Planning Application Submitted'].dt.year
+
+    return df
+
+df = load_data()
+
+# --- SIDEBAR FILTERS ---
+st.sidebar.header("🔍 Filters")
+technologies = st.sidebar.multiselect("Technology Type", df['Technology Type'].dropna().unique(), default=['Solar Photovoltaics'])
+regions = st.sidebar.multiselect("Region", df['Region'].dropna().unique(), default=df['Region'].dropna().unique())
+size_range = st.sidebar.slider("Project Size (MW)", 0, int(df['Installed Capacity (MWelec)'].max()), (0, 50))
+years = st.sidebar.slider("Application Year", int(df['Application Year'].min()), int(df['Application Year'].max()), (2015, 2025))
+
+# --- DATA FILTERING ---
+filtered_df = df[
+    (df['Technology Type'].isin(technologies)) &
+    (df['Region'].isin(regions)) &
+    (df['Installed Capacity (MWelec)'] >= size_range[0]) &
+    (df['Installed Capacity (MWelec)'] <= size_range[1]) &
+    (df['Application Year'] >= years[0]) &
+    (df['Application Year'] <= years[1])
+]
+
+# --- MAIN DASHBOARD ---
+st.subheader("📊 Summary Stats")
+st.markdown(f"**{len(filtered_df)}** projects match your filters.")
+
+col1, col2, col3 = st.columns(3)
+col1.metric("Average Consent Time (days)", f"{filtered_df['Time to Consent (days)'].mean():.1f}")
+col2.metric("Median Consent Time (days)", f"{filtered_df['Time to Consent (days)'].median():.1f}")
+col3.metric("Max Consent Time (days)", f"{filtered_df['Time to Consent (days)'].max():.0f}")
+
+# --- CHARTS ---
+st.subheader("📈 Consent Time Over Time")
+if not filtered_df.empty:
+    chart_df = filtered_df.groupby('Application Year')['Time to Consent (days)'].mean().reset_index()
+    st.line_chart(chart_df.set_index('Application Year'))
+else:
+    st.warning("No data available for the selected filters.")
+
+# --- DATA QUALITY WARNINGS ---
+st.subheader("🚨 Data Quality Warnings")
+
+# Blank fields
+blanks = df[
+    df['Planning Application Submitted'].isna() |
+    df['Planning Permission Granted'].isna() |
+    df['Installed Capacity (MWelec)'].isna() |
+    df['Technology Type'].isna() |
+    df['Region'].isna()
+]
+
+# Weird values
+outliers = df[
+    (df['Time to Consent (days)'] < 0) |
+    (df['Installed Capacity (MWelec)'] <= 0) |
+    (df['Installed Capacity (MWelec)'] > 300)
+]
+
+if blanks.empty and outliers.empty:
+    st.success("No major data quality issues found. 🎉")
+else:
+    if not blanks.empty:
+        st.warning(f"⚠️ {len(blanks)} projects have missing critical fields.")
+        st.dataframe(blanks[['Ref ID', 'Site Name', 'Planning Application Submitted', 'Planning Permission Granted', 'Installed Capacity (MWelec)', 'Region']])
+    
+    if not outliers.empty:
+        st.warning(f"⚠️ {len(outliers)} projects have suspicious values.")
+        st.dataframe(outliers[['Ref ID', 'Site Name', 'Installed Capacity (MWelec)', 'Time to Consent (days)', 'Region']])
+
+# --- EXPORT ---
+st.subheader("📥 Export Data")
+export_csv = filtered_df.to_csv(index=False).encode('utf-8')
+st.download_button("Download CSV", export_csv, "filtered_repd.csv", "text/csv")
