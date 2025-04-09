@@ -87,16 +87,14 @@ else:
 
 # --- SAFELY HANDLE APPLICATION YEAR SLIDER ---
 if 'Application Year' in df.columns and df['Application Year'].dropna().size > 0:
-    if 'Application Year' in df.columns and df['Application Year'].dropna().size > 0:
-        min_year = int(df['Application Year'].min())
-        max_year = int(df['Application Year'].max())
-        years = st.sidebar.slider("Application Year", min_year, max_year, (min_year, max_year))
-    else:
-    st.warning("⚠️ Application Year data not available.")
-    years = (2020, 2025)
-
+    min_year = int(df['Application Year'].min())
+    max_year = int(df['Application Year'].max())
+    years = st.sidebar.slider("Application Year", min_year, max_year, (min_year, max_year))
 else:
-    years = (2020, 2025)  # fallback if column is missing or empty
+    st.warning("⚠️ Application Year data not available.")
+    years = (2020, 2025) # fallback if all values are missing
+
+st.write("🧪 Application Year values:", df['Application Year'].dropna().unique())
 
 # --- DATA FILTERING ---
 filtered_df = df[
