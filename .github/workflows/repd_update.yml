@@ -1,0 +1,39 @@
+name: REPD Data Auto-Update
+
+on:
+  schedule:
+    - cron: '0 9 1 * *'  # 9am UTC on the 1st of each month
+  workflow_dispatch:
+
+jobs:
+  update-repd-data:
+    runs-on: ubuntu-latest
+
+    env:
+      EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+
+    steps:
+      - name: 📥 Checkout repo
+        uses: actions/checkout@v3
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 🧪 Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: ⚙️ Run REPD update script
+        run: python repd_update_script.py
+
+      - name: 📤 Commit updated files
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add cleaned_repd.csv update_log.txt
+          git commit -m "📈 Auto-update cleaned REPD data"
+          git push
+        continue-on-error: true
