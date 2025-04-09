@@ -16,6 +16,9 @@ st.markdown("Filter, explore and export data from the UK Renewable Energy Planni
 @st.cache_data
 
 def load_data():
+    # Show what column names are present in live environment
+    st.write("📋 Loaded columns:", list(df.columns))
+
     if not os.path.exists(LOCAL_CSV_PATH):
         st.error(f"CSV file '{LOCAL_CSV_PATH}' not found.")
         st.stop()
@@ -51,7 +54,11 @@ def load_data():
     df['Planning Application Submitted'] = pd.to_datetime(df['Planning Application Submitted'], errors='coerce')
     df['Planning Permission Granted'] = pd.to_datetime(df['Planning Permission Granted'], errors='coerce')
     df['Time to Consent (days)'] = (df['Planning Permission Granted'] - df['Planning Application Submitted']).dt.days
-    df['Application Year'] = df['Planning Application Submitted'].dt.year
+    if 'Application Year' not in df.columns:
+        if 'Planning Application Submitted' in df.columns:
+            df['Application Year'] = pd.to_datetime(df['Planning Application Submitted'], errors='coerce').dt.year
+        else:
+            df['Application Year'] = pd.NA
 
     return df
 
@@ -80,9 +87,14 @@ else:
 
 # --- SAFELY HANDLE APPLICATION YEAR SLIDER ---
 if 'Application Year' in df.columns and df['Application Year'].dropna().size > 0:
-    min_year = int(df['Application Year'].min())
-    max_year = int(df['Application Year'].max())
-    years = st.sidebar.slider("Application Year", min_year, max_year, (min_year, max_year))
+    if 'Application Year' in df.columns and df['Application Year'].dropna().size > 0:
+        min_year = int(df['Application Year'].min())
+        max_year = int(df['Application Year'].max())
+        years = st.sidebar.slider("Application Year", min_year, max_year, (min_year, max_year))
+    else:
+    st.warning("⚠️ Application Year data not available.")
+    years = (2020, 2025)
+
 else:
     years = (2020, 2025)  # fallback if column is missing or empty
 
