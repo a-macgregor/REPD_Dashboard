@@ -1,122 +1,103 @@
+# repd_dashboard_app.py
+
 import streamlit as st
 import pandas as pd
 import datetime
+from data_utils import load_data  # Import our helper function
 
 # --- CONFIG ---
 CSV_URL = "https://assets.publishing.service.gov.uk/media/67f5282490615dd92bc90d06/repd-q4-jan-2025.csv"
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="UK REPD Dashboard", layout="wide")
-st.title("\U0001F4C8 Renewable Energy Planning Dashboard")
+st.title("📈 Renewable Energy Planning Dashboard")
 st.markdown("Filter, explore and export data from the UK Renewable Energy Planning Database (REPD).")
 
-# --- LOAD AND CLEAN DATA ---
+# --- LOAD DATA ---
 @st.cache_data
-def load_data():
-    try:
-        df = pd.read_csv(CSV_URL, encoding='ISO-8859-1')
-    except UnicodeDecodeError:
-        df = pd.read_csv(CSV_URL, encoding='utf-8', errors='replace')
+def get_data():
+    return load_data(CSV_URL)
 
-    # 🔍 DEBUG: Confirm CSV has loaded and basic structure looks right
-    # st.write("✅ Fetched CSV from:", CSV_URL)
-    # st.write("📋 Loaded columns:", df.columns.tolist())
-    # st.write("🔢 Data types:", df.dtypes)
-    # st.write("🧪 First few rows:")
-    # st.dataframe(df.head())
+df = get_data()
 
-    # Clean column names
-    df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", '')
-
-    # Normalize key columns
-    df['Technology Type'] = df.get('Technology Type', pd.Series(dtype='str')).astype(str).str.strip().str.title()
-    df['Region'] = df.get('Region', pd.Series(dtype='str')).astype(str).str.strip().str.title()
-
-    # Installed Capacity
-    if 'Installed Capacity (MWelec)' in df.columns:
-        df['Installed Capacity (MWelec)'] = (
-            df['Installed Capacity (MWelec)']
-            .astype(str)
-            .str.replace(',', '')
-            .str.replace('MW', '', case=False)
-            .str.strip()
-            .replace('', '0')
-        )
-        df['Installed Capacity (MWelec)'] = pd.to_numeric(df['Installed Capacity (MWelec)'], errors='coerce')
-    else:
-        df['Installed Capacity (MWelec)'] = pd.NA
-
-    # Dates and Application Year
-    df['Planning Application Submitted'] = pd.to_datetime(df.get('Planning Application Submitted', pd.NaT), errors='coerce')
-    df['Planning Permission Granted'] = pd.to_datetime(df.get('Planning Permission Granted', pd.NaT), errors='coerce')
-    df['Time to Consent (days)'] = (df['Planning Permission Granted'] - df['Planning Application Submitted']).dt.days
-    df['Application Year'] = df['Planning Application Submitted'].dt.year
-
-    return df
-
-df = load_data()
+# For debugging purposes, you might display the raw loaded data:
+st.write("✅ Fetched CSV from:", CSV_URL)
+# st.write("📋 Loaded columns:", df.columns.tolist())
+# st.write("🔢 Data preview:", df.head())
 
 # --- SIDEBAR FILTERS ---
-st.sidebar.header("\U0001F50D Filters")
-tech_options = df['Technology Type'].dropna().unique().tolist()
-region_options = df['Region'].dropna().unique().tolist()
-
-selected_tech = st.sidebar.multiselect("Technology Type", tech_options, default=tech_options)
+st.sidebar.header("🔍 Filters")
+tech_options = sorted(df['technology type'].dropna().unique().tolist())
+default_tech = ['Solar Photovoltaics'] if 'Solar Photovoltaics' in tech_options else []
+selected_tech = st.sidebar.multiselect("Technology Type", tech_options, default=default_tech)
+region_options = sorted(df['region'].dropna().unique().tolist())
 selected_regions = st.sidebar.multiselect("Region", region_options, default=region_options)
 
-if df['Installed Capacity (MWelec)'].dropna().size > 0:
-    min_cap = int(df['Installed Capacity (MWelec)'].min())
-    max_cap = int(df['Installed Capacity (MWelec)'].max())
+if df['installed capacity (mwelec)'].dropna().size > 0:
+    min_cap = int(df['installed capacity (mwelec)'].min())
+    max_cap = int(df['installed capacity (mwelec)'].max())
     selected_capacity = st.sidebar.slider("Installed Capacity (MW)", min_cap, max_cap, (min_cap, max_cap))
 else:
     selected_capacity = (0, 0)
 
-if df['Application Year'].dropna().size > 0:
-    min_year = int(df['Application Year'].min())
-    max_year = int(df['Application Year'].max())
+if df['application year'].dropna().size > 0:
+    min_year = int(df['application year'].min())
+    max_year = int(df['application year'].max())
     selected_years = st.sidebar.slider("Application Year", min_year, max_year, (min_year, max_year))
 else:
     selected_years = (2020, 2025)
 
 # --- DATA FILTERING ---
 filtered_df = df[
-    (df['Technology Type'].isin(selected_tech)) &
-    (df['Region'].isin(selected_regions)) &
-    (df['Installed Capacity (MWelec)'] >= selected_capacity[0]) &
-    (df['Installed Capacity (MWelec)'] <= selected_capacity[1]) &
-    (df['Application Year'] >= selected_years[0]) &
-    (df['Application Year'] <= selected_years[1])
+    (df['technology type'].isin(selected_tech)) &
+    (df['region'].isin(selected_regions)) &
+    (df['installed capacity (mwelec)'] >= selected_capacity[0]) &
+    (df['installed capacity (mwelec)'] <= selected_capacity[1]) &
+    (df['application year'] >= selected_years[0]) &
+    (df['application year'] <= selected_years[1])
 ]
 
 # --- SUMMARY METRICS ---
-st.subheader("\U0001F4CA Summary Stats")
+st.subheader("📊 Summary Stats")
 st.markdown(f"**{len(filtered_df)}** projects match your filters.")
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Avg. Consent Time (days)", f"{filtered_df['Time to Consent (days)'].mean():.1f}")
-col2.metric("Median Consent Time (days)", f"{filtered_df['Time to Consent (days)'].median():.1f}")
-col3.metric("Max Consent Time (days)", f"{filtered_df['Time to Consent (days)'].max():.0f}")
+col1.metric("Avg. Consent Time (days)", f"{filtered_df['time to consent (days)'].mean():.1f}")
+col2.metric("Median Consent Time (days)", f"{filtered_df['time to consent (days)'].median():.1f}")
+col3.metric("Max Consent Time (days)", f"{filtered_df['time to consent (days)'].max():.0f}")
 
 # --- LINE CHART ---
-st.subheader("\U0001F4C8 Consent Time Over Time")
+st.subheader("📈 Consent Time Over Time")
 if not filtered_df.empty:
-    chart_df = filtered_df.groupby('Application Year')['Time to Consent (days)'].mean().reset_index()
-    st.line_chart(chart_df.set_index('Application Year'))
+    # Filter out rows with missing application year
+    df_year = filtered_df[filtered_df['application year'].notna()].copy()
+    # Force conversion of 'application year' to integer (this avoids decimal labels)
+    df_year['application year'] = df_year['application year'].astype(int)
+    # Group by application year and calculate the mean consent time
+    chart_df = df_year.groupby('application year', as_index=False)['time to consent (days)'].mean()
+    chart_df = chart_df.sort_values('application year')
+    # Convert the year column to strings before plotting
+    chart_df['application year'] = chart_df['application year'].astype(int).astype(str)
+    st.line_chart(chart_df.set_index('application year'))
 else:
     st.warning("No data available for the selected filters.")
 
-# --- OPTIONAL: RAW DATA TABLE ---
-st.subheader("\U0001F5C3️ View Filtered Data")
+# After grouping and sorting:
+# chart_df['application year'] = chart_df['application year'].astype(int).astype(str)
+# st.line_chart(chart_df.set_index('application year'))
+
+# --- EXPANDABLE RAW DATA VIEW ---
+st.subheader("📂 View Filtered Data")
 with st.expander("Show raw filtered data"):
     st.dataframe(filtered_df)
 
-# --- EXPORT DATA ---
-st.subheader("\U0001F4E5 Export Data")
+# --- CSV EXPORT ---
+st.subheader("📥 Export Filtered Data")
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-csv = filtered_df.to_csv(index=False).encode("utf-8")
+csv_data = filtered_df.to_csv(index=False).encode("utf-8")
 st.download_button(
     label="Download Filtered CSV",
-    data=csv,
+    data=csv_data,
     file_name=f"repd_filtered_{timestamp}.csv",
     mime="text/csv"
 )
