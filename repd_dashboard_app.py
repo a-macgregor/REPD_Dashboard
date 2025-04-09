@@ -13,7 +13,17 @@ st.markdown("Filter, explore and export data from the UK Renewable Energy Planni
 # --- LOAD AND CLEAN DATA ---
 @st.cache_data
 def load_data():
-    df = pd.read_csv(CSV_URL, encoding="ISO-8859-1")
+    try:
+        df = pd.read_csv(CSV_URL, encoding='ISO-8859-1')
+    except UnicodeDecodeError:
+        df = pd.read_csv(CSV_URL, encoding='utf-8', errors='replace')
+
+    # 🔍 DEBUG: Confirm CSV has loaded and basic structure looks right
+    # st.write("✅ Fetched CSV from:", CSV_URL)
+    # st.write("📋 Loaded columns:", df.columns.tolist())
+    # st.write("🔢 Data types:", df.dtypes)
+    # st.write("🧪 First few rows:")
+    # st.dataframe(df.head())
 
     # Clean column names
     df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", '')
